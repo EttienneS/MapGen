@@ -5,49 +5,25 @@ namespace MapGen
 {
     internal class Program : ConsoleGame
     {
-        private const int centerX = Width / 2;
-
-        private const int centerY = Height / 2;
+        public Random Random;
+        public int Seed = 1;
+        
 
         private const int Height = 64;
 
         private const int Width = 128;
 
-        private readonly Map Map = new Map(Width, Height);
-
-        private readonly Random Random = new Random();
-
-        private CellData Center;
+        private Map Map;
+        private bool Paused = true;
 
         public override void Create()
         {
             Engine.SetPalette(Palettes.Pico8);
             Engine.Borderless();
 
-            TargetFramerate = 60;
+            TargetFramerate = 3;
 
-            Center = Map.Cells[centerX, centerY];
-            
-
-            for (int i = 0; i < 36; i++)
-            {
-                var target = Map.GetPointAtDistanceOnAngle(Center, 20, i * 10);
-                target.Tile = "+";
-                foreach (var cell in Map.GetLine(Center, target))
-                {
-                    cell.Tile = "+";
-                }
-            }
-
-            for (int i = 0; i < 10; i++)
-            {
-                var point1 = Map.Cells[Random.Next(0, Width), Random.Next(0, Height)];
-                var point2 = Map.Cells[Random.Next(0, Width), Random.Next(0, Height)];
-                foreach (var cell in Map.GetLine(point1, point2))
-                {
-                    cell.Tile = "|";
-                }
-            }
+            MakeTown(Seed);
         }
 
         public override void Render()
@@ -59,32 +35,61 @@ namespace MapGen
                 Engine.WriteText(new Point(cell.X, cell.Y), cell.Tile, cell.Color);
             }
 
+            var seedString = Seed.ToString();
+            for (int i = 0; i < seedString.Length; i++)
+            {
+                Engine.WriteText(new Point(i + 1, 1), seedString.Substring(i, 1), 6);
+            }
+
             Engine.DisplayBuffer();
         }
 
         public override void Update()
         {
-            //var cCol = Random.Next(0, 15);
+            if (Engine.GetKeyDown(ConsoleKey.Spacebar))
+            {
+                Paused = !Paused;
+            }
 
-            //foreach (var cell in Map.GetCircle(Map.GetRandomCell(), Random.Next(5,10)))
-            //{
-            //    cell.Tile = "+";
-            //    cell.Color = cCol;
-            //}
-
-            //var point1 = Map.Cells[Random.Next(0, Width), Random.Next(0, Height)];
-            //var point2 = Map.Cells[Random.Next(0, Width), Random.Next(0, Height)];
-            //var col = Random.Next(0, 15);
-            //foreach (var cell in Map.GetLine(point1, point2))
-            //{
-            //    cell.Tile = "O";
-            //    cell.Color = col;
-            //}
+            if (!Paused || Engine.GetKeyDown(ConsoleKey.X))
+            {
+                Seed++;
+                Map.Clear();
+                var passed = MakeTown(Seed);
+                
+                while (!Paused && !passed)
+                {
+                    passed = MakeTown(Seed);
+                    Seed++;
+                }
+            }
         }
 
         private static void Main(string[] args)
         {
             new Program().Construct(Width, Height, 10, 10, FramerateMode.MaxFps);
+        }
+
+        public const string Error = "░";
+
+       
+        private bool MakeTown(int seed)
+        {
+            try
+            {
+                Random = new Random(seed);
+
+                Map = new Map(Width, Height, Random);
+
+                Map.CreateTown();
+            }
+            catch (Exception ex)
+            {
+                Map.Fill(Error, 8);
+                return false;
+            }
+
+            return true;
         }
     }
 }

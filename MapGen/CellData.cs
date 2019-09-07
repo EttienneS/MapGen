@@ -1,10 +1,9 @@
-﻿using System;
-using ConsoleGameEngine;
-
-namespace MapGen
+﻿namespace MapGen
 {
     public class CellData
     {
+        private string _tile;
+
         public CellData(int x, int y)
         {
             X = x;
@@ -13,7 +12,8 @@ namespace MapGen
             Color = 6;
         }
 
-        private string _tile;
+        public int Color { get; set; }
+
         public string Tile
         {
             get
@@ -21,9 +21,14 @@ namespace MapGen
                 return _tile;
             }
         }
+
         public int X { get; set; }
         public int Y { get; set; }
-        public int Color { get; set; }
+
+        public override string ToString()
+        {
+            return $"{X}:{Y} ({Tile})";
+        }
 
         internal void SetTile(string character, int color = 6)
         {

@@ -1,13 +1,17 @@
 ﻿using ConsoleGameEngine;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace MapGen
 {
     public class Map
     {
-        public const string Road = "░";
         public const string Building = "█";
+        public const string Floor = "≡";
+        public const string Grass = ".";
+        public const string Reserved = "-";
+        public const string Road = "░";
         public CellData[,] Cells;
         public int Height;
         public Random Random;
@@ -20,6 +24,7 @@ namespace MapGen
             Height = height;
             Random = random;
             Streets = new List<List<CellData>>();
+            Buildings = new List<List<CellData>>();
             for (int x = 0; x < width; x++)
             {
                 for (int y = 0; y < height; y++)
@@ -29,6 +34,12 @@ namespace MapGen
             }
         }
 
+        public enum Axis
+        {
+            xOnly, yOnly, Both
+        }
+
+        public List<List<CellData>> Buildings { get; set; }
         public List<List<CellData>> Streets { get; set; }
 
         private CellData Center
@@ -67,6 +78,15 @@ namespace MapGen
                     engine.SetPixel(new Point(x, y), 15, ConsoleCharacter.Full);
                 }
             }
+        }
+
+        public List<CellData> GetBorder(List<CellData> square)
+        {
+            var frame = square.ToList();
+            var hollow = HollowSquare(square);
+            frame.RemoveAll(c => hollow.Contains(c));
+
+            return frame;
         }
 
         public CellData GetCellAtCoordinate(int x, int y)
@@ -154,6 +174,37 @@ namespace MapGen
             return line;
         }
 
+        public (int minx, int maxx, int miny, int maxy) GetMinMax(List<CellData> cells)
+        {
+            var minx = int.MaxValue;
+            var maxx = int.MinValue;
+
+            var miny = int.MaxValue;
+            var maxy = int.MinValue;
+
+            foreach (var cell in cells)
+            {
+                if (cell.X > maxx)
+                {
+                    maxx = cell.X;
+                }
+                if (cell.X < minx)
+                {
+                    minx = cell.X;
+                }
+                if (cell.Y > maxy)
+                {
+                    maxy = cell.Y;
+                }
+                if (cell.Y < miny)
+                {
+                    miny = cell.Y;
+                }
+            }
+
+            return (minx, maxx, miny, maxy);
+        }
+
         public List<CellData> GetNaiveLine(CellData a, CellData b)
         {
             var line = new List<CellData>();
@@ -198,33 +249,17 @@ namespace MapGen
 
         public (int, int) GetWidthAndHeight(List<CellData> cells)
         {
-            var minx = int.MaxValue;
-            var maxx = int.MinValue;
+            var minMax = GetMinMax(cells);
+            return (minMax.maxx - minMax.minx, minMax.maxy - minMax.miny);
+        }
 
-            var miny = int.MaxValue;
-            var maxy = int.MinValue;
-
-            foreach (var cell in cells)
-            {
-                if (cell.X > maxx)
-                {
-                    maxx = cell.X;
-                }
-                if (cell.X < minx)
-                {
-                    minx = cell.X;
-                }
-                if (cell.Y > maxy)
-                {
-                    maxy = cell.Y;
-                }
-                if (cell.Y < miny)
-                {
-                    miny = cell.Y;
-                }
-            }
-
-            return (maxx - minx, maxy - miny);
+        public List<CellData> HollowSquare(List<CellData> square)
+        {
+            var minMax = GetMinMax(square);
+            return GetRectangle(new CellData(minMax.Item1 + 1,
+                                             minMax.Item3 + 1),
+                                             minMax.Item2 - minMax.Item1 - 1,
+                                             minMax.Item4 - minMax.Item3 - 1);
         }
 
         internal void Clear()
@@ -240,89 +275,15 @@ namespace MapGen
 
         internal void CreateTown()
         {
-            var mainStreet = GetDiameterLine(Center, Random.Next(30, 90), Random.Next(-10, 10));
-            mainStreet.ForEach(c => c.SetTile(Road));
-            Streets.Add(mainStreet);
+            CreateStreets();
 
-            for (int i = 1; i < mainStreet.Count; i++)
+            CreateBuildings(7, 7, 3, 3);
+
+            foreach (var cell in Cells)
             {
-                if (Random.NextDouble() > 0.6)
+                if (string.IsNullOrWhiteSpace(cell.Tile) && Random.NextDouble() > 0.8)
                 {
-                    MakeStreet(mainStreet[i], Random.Next(15, 25), true, Random.NextDouble() * 2, i);
-                    i += 5;
-                }
-            }
-
-            var maxWidth = 5;
-            var maxHeight = 5;
-
-            var minWidth = 2;
-            var minHeight = 2;
-
-            maxWidth *= 2;
-            maxHeight *= 2;
-
-            foreach (var street in Streets)
-            {
-                for (int cellIndex = 0; cellIndex < street.Count; cellIndex++)
-                {
-                    var cell = street[cellIndex];
-                    var biggest = new List<CellData>();
-                    for (int i = 0; i < 8; i++)
-                    {
-                        var neighbour = GetCellAttRadian(cell, 1, i * 45);
-                        bool found = false;
-                        for (int width = 0; width < maxWidth; width++)
-                        {
-                            for (int height = 0; height < maxHeight; height++)
-                            {
-                                var structure = GetRectangle(neighbour, width - (maxWidth / 2), height - (maxHeight / 2));
-                                var measure = GetWidthAndHeight(structure);
-
-                                if (measure.Item1 < minWidth)
-                                {
-                                    continue;
-                                }
-
-                                if (measure.Item2 < minHeight)
-                                {
-                                    continue;
-                                }
-
-                                if (structure.TrueForAll(c => string.IsNullOrWhiteSpace(c.Tile)))
-                                {
-                                    if (structure.Count > biggest.Count)
-                                    {
-                                        biggest = structure;
-                                        if (biggest.Count >= maxWidth * maxHeight)
-                                        {
-                                            found = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (found)
-                            {
-                                break;
-                            }
-                        }
-
-                        if (found)
-                        {
-                            break;
-                        }
-                    }
-
-                    if (biggest.Count > 0)
-                    {
-                        var col = Random.Next(1, 15);
-                        biggest.ForEach(c => c.SetTile(Building, col));
-
-                        var measure = GetWidthAndHeight(biggest);
-                        cellIndex += Math.Max(measure.Item1, measure.Item2) + Random.Next(1, 3);
-                    }
+                    cell.SetTile(Grass, 3);
                 }
             }
         }
@@ -394,6 +355,213 @@ namespace MapGen
             var mineX = Clamp((int)(origin.X + (radius * Math.Cos(angle))), 0, Width);
             var mineY = Clamp((int)(origin.Y + (radius * Math.Sin(angle))), 0, Height);
             return GetCellAtCoordinate(mineX, mineY);
+        }
+
+        private void CreateBuildings(int maxWidth, int maxHeight, int minWidth, int minHeight)
+        {
+            foreach (var street in Streets)
+            {
+                for (int cellIndex = 0; cellIndex < street.Count - 1; cellIndex++)
+                {
+                    var cell = street[cellIndex];
+                    var biggest = new List<CellData>();
+
+                    var neighbours = new List<CellData>
+                    {
+                        cell,
+                        new CellData(cell.X + 1, cell.Y),
+                        new CellData(cell.X - 1, cell.Y),
+                        new CellData(cell.X, cell.Y + 1),
+                        new CellData(cell.X, cell.Y - 1),
+                    };
+                    foreach (var neighbour in neighbours)
+                    {
+                        bool found = false;
+                        for (int width = -maxWidth; width < maxWidth; width++)
+                        {
+                            for (int height = -maxHeight; height < maxHeight; height++)
+                            {
+                                var structure = GetRectangle(neighbour, width, height);
+                                var measure = GetWidthAndHeight(structure);
+
+                                if (measure.Item1 < minWidth)
+                                {
+                                    continue;
+                                }
+
+                                if (measure.Item2 < minHeight)
+                                {
+                                    continue;
+                                }
+
+                                if (structure.TrueForAll(c => string.IsNullOrWhiteSpace(c.Tile)))
+                                {
+                                    if (Random.NextDouble() > 0.9)
+                                    {
+                                        biggest = structure;
+                                        found = true;
+                                        break;
+                                    }
+
+                                    if (structure.Count > biggest.Count)
+                                    {
+                                        biggest = structure;
+                                        if (biggest.Count >= maxWidth * maxHeight)
+                                        {
+                                            // max size for space found stop searching
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (found)
+                            {
+                                break;
+                            }
+                        }
+
+                        if (found)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (biggest.Count > 0)
+                    {
+                        var col = Random.Next(1, 15);
+                        biggest.ForEach(c => c.SetTile(Building, col));
+                        Buildings.Add(biggest);
+
+                        foreach (var buffer in Grow(biggest, Random.Next(1, 3)))
+                        {
+                            if (string.IsNullOrWhiteSpace(buffer.Tile))
+                            {
+                                buffer.SetTile(Reserved, 8);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // cull buildings that are not connected
+            foreach (var building in Buildings)
+            {
+                var v = Random.NextDouble();
+
+                if (!Grow(building, 1).Any(c => c.Tile == Road))
+                {
+                    foreach (var cell in building)
+                    {
+                        cell.SetTile("", 1);
+                    }
+                }
+                else
+                {
+                    foreach (var cell in HollowSquare(building))
+                    {
+                        cell.SetTile(Reserved, 1);
+                    }
+
+                    var doors = GetPossibleDoors(building);
+                    if (doors.Count > 0)
+                    {
+                        doors[Random.Next(0, doors.Count)].SetTile(Reserved);
+                    }
+                    else
+                    {
+                        foreach (var cell in building)
+                        {
+                            cell.SetTile("", 3);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void CreateStreets()
+        {
+            var mainStreet = GetDiameterLine(Center, Random.Next(30, 90), Random.Next(-10, 10));
+            mainStreet.ForEach(c => c.SetTile(Road));
+            Streets.Add(mainStreet);
+
+            for (int i = 1; i < mainStreet.Count; i++)
+            {
+                if (Random.NextDouble() > 0.8)
+                {
+                    MakeStreet(mainStreet[i], Random.Next(15, 25), true, Random.NextDouble() * 2, 6);
+                    i += 5;
+                }
+            }
+        }
+
+        private List<CellData> GetCorners(List<CellData> square)
+        {
+            var minMax = GetMinMax(square);
+
+            return new List<CellData>
+            {
+                new CellData(minMax.minx, minMax.miny),
+                new CellData(minMax.minx, minMax.maxy),
+                new CellData(minMax.maxx, minMax.miny),
+                new CellData(minMax.maxx, minMax.maxy)
+            };
+        }
+
+        private List<CellData> GetNeigbours(CellData cell)
+        {
+            return Grow(new List<CellData> { cell }, 1);
+        }
+
+        private List<CellData> GetPossibleDoors(List<CellData> building)
+        {
+            var doors = new List<CellData>();
+            var corners = GetCorners(building);
+            foreach (var cell in GetBorder(building))
+            {
+                if (corners.Any(c => c.X == cell.X && c.Y == cell.Y))
+                {
+                    continue;
+                }
+
+                var neighbours = GetNeigbours(cell).Count(c => c.Tile == Road);
+                if (neighbours > 1)
+                {
+                    doors.Add(cell);
+                }
+            }
+
+            return doors;
+        }
+
+        private List<CellData> Grow(List<CellData> cells, int size)
+        {
+            var group = cells.ToList();
+
+            foreach (var cell in cells)
+            {
+                for (int x = -size; x <= size; x++)
+                {
+                    for (int y = -size; y <= size; y++)
+                    {
+                        var tx = cell.X + x;
+                        var ty = cell.Y + y;
+
+                        if (group.Any(g => g.X == tx && g.Y == ty))
+                        {
+                            continue;
+                        }
+
+                        if (tx >= 0 && tx < Width && ty >= 0 && ty < Height)
+                        {
+                            group.Add(Cells[tx, ty]);
+                        }
+                    }
+                }
+            }
+
+            return group.Distinct().ToList();
         }
 
         private void MakeStreet(CellData crossingPoint, int length, bool vertical, double momentum, int color)

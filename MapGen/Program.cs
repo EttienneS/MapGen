@@ -6,7 +6,7 @@ namespace MapGen
     internal class Program : ConsoleGame
     {
         public const string Error = "░";
-        public const int Height = 64;
+        public const int Height = 60;
         public const int Width = 128;
         public int Failures = 0;
         public Random Random;
